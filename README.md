@@ -37,7 +37,7 @@
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/SyncScript.git
+   git clone https://github.com/AjinkyaSatam/SyncScript.git
    cd SyncScript
    ```
 
@@ -75,6 +75,15 @@ Open **`http://localhost:5000`** in your browser.
 
 ---
 
+## 📌 Project Background & Acknowledgements
+
+> **Note**: This application was originally developed as a college mini-project. It has been modernized, polished, and published on GitHub to share with the open-source developer community.
+> 
+> **Acknowledgements**: This project is inspired by the work and educational content of **Rakesh (aka CodersGyan)**. Special thanks to CodersGyan for inspiring the architectural foundation and real-time collaboration workflow of this project.
+
+---
+
 ## 📜 License
 
 MIT License. Free for personal and commercial use.
+
