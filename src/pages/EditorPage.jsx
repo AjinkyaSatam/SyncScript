@@ -71,8 +71,19 @@ const EditorPage = () => {
   const username = location.state.username;
 
   useEffect(() => {
+    let isSubscribed = true;
+    let socketInstance = null;
+
     const init = async () => {
-      const socketInstance = await initSocket();
+      socketInstance = await initSocket();
+
+      if (!isSubscribed) {
+        if (socketInstance) {
+          socketInstance.disconnect();
+        }
+        return;
+      }
+
       socketRef.current = socketInstance;
       setSocket(socketInstance);
 
@@ -130,13 +141,15 @@ const EditorPage = () => {
     init();
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current.off('joined');
-        socketRef.current.off('disconnected');
-        socketRef.current.off('language-change');
-        socketRef.current.off('connect_error');
-        socketRef.current.off('connect_failed');
+      isSubscribed = false;
+      const currentSocket = socketInstance || socketRef.current;
+      if (currentSocket) {
+        currentSocket.disconnect();
+        currentSocket.off('joined');
+        currentSocket.off('disconnected');
+        currentSocket.off('language-change');
+        currentSocket.off('connect_error');
+        currentSocket.off('connect_failed');
       }
     };
   }, []);
