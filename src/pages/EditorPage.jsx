@@ -55,6 +55,7 @@ const EditorPage = () => {
   const { roomId } = useParams();
   const reactNavigator = useNavigate();
 
+  const [socket, setSocket] = useState(null);
   const [clients, setClients] = useState([]);
   const [language, setLanguage] = useState('javascript');
   const [consoleOutput, setConsoleOutput] = useState('');
@@ -71,7 +72,9 @@ const EditorPage = () => {
 
   useEffect(() => {
     const init = async () => {
-      socketRef.current = await initSocket();
+      const socketInstance = await initSocket();
+      socketRef.current = socketInstance;
+      setSocket(socketInstance);
 
       const handleErrors = (e) => {
         console.error('Socket error', e);
@@ -79,17 +82,17 @@ const EditorPage = () => {
         reactNavigator('/');
       };
 
-      socketRef.current.on('connect_error', handleErrors);
-      socketRef.current.on('connect_failed', handleErrors);
+      socketInstance.on('connect_error', handleErrors);
+      socketInstance.on('connect_failed', handleErrors);
 
       // Emit Join Room event
-      socketRef.current.emit('join', {
+      socketInstance.emit('join', {
         roomId,
         username,
       });
 
       // Listen for joined event
-      socketRef.current.on('joined', ({ clients, username: joinedUser, socketId }) => {
+      socketInstance.on('joined', ({ clients, username: joinedUser, socketId }) => {
         if (joinedUser !== username) {
           toast.success(`${joinedUser} joined the room.`, {
             icon: '👤',
@@ -99,24 +102,24 @@ const EditorPage = () => {
 
         // Sync latest code and language to newly joined client
         if (codeRef.current) {
-          socketRef.current.emit('sync-code', {
+          socketInstance.emit('sync-code', {
             code: codeRef.current,
             socketId,
           });
         }
-        socketRef.current.emit('sync-language', {
+        socketInstance.emit('sync-language', {
           language,
           socketId,
         });
       });
 
       // Listen for language change sync from other users
-      socketRef.current.on('language-change', ({ language: newLang }) => {
+      socketInstance.on('language-change', ({ language: newLang }) => {
         setLanguage(newLang);
       });
 
       // Listen for user leaving room
-      socketRef.current.on('disconnected', ({ socketId, username: leftUser }) => {
+      socketInstance.on('disconnected', ({ socketId, username: leftUser }) => {
         toast(`${leftUser || 'A user'} left the room.`, {
           icon: '👋',
         });
@@ -165,7 +168,18 @@ const EditorPage = () => {
 
   const copyRoomId = async () => {
     try {
-      await navigator.clipboard.writeText(roomId);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(roomId);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = roomId;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       toast.success('Room ID copied to clipboard!');
     } catch (err) {
       toast.error('Could not copy Room ID');
@@ -294,6 +308,7 @@ const EditorPage = () => {
         <div className="editor-workspace">
           <Editor
             socketRef={socketRef}
+            socket={socket}
             roomId={roomId}
             language={language}
             onCodeChange={(code) => {

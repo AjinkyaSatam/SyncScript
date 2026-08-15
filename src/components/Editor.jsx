@@ -30,7 +30,7 @@ const getCodeMirrorMode = (lang) => {
   }
 };
 
-const Editor = ({ socketRef, roomId, onCodeChange, language }) => {
+const Editor = ({ socketRef, socket, roomId, onCodeChange, language }) => {
   const editorRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -56,8 +56,9 @@ const Editor = ({ socketRef, roomId, onCodeChange, language }) => {
         const code = instance.getValue();
         onCodeChange(code);
 
-        if (origin !== 'setValue' && socketRef.current) {
-          socketRef.current.emit('code-change', {
+        const currentSocket = socket || socketRef?.current;
+        if (origin !== 'setValue' && currentSocket) {
+          currentSocket.emit('code-change', {
             roomId,
             code,
           });
@@ -84,9 +85,9 @@ const Editor = ({ socketRef, roomId, onCodeChange, language }) => {
 
   // Listen to real-time incoming code changes from socket
   useEffect(() => {
-    if (socketRef.current) {
-      const socket = socketRef.current;
+    const activeSocket = socket || socketRef?.current;
 
+    if (activeSocket) {
       const handleCodeChange = ({ code }) => {
         if (code !== null && editorRef.current) {
           const currentCode = editorRef.current.getValue();
@@ -96,13 +97,13 @@ const Editor = ({ socketRef, roomId, onCodeChange, language }) => {
         }
       };
 
-      socket.on('code-change', handleCodeChange);
+      activeSocket.on('code-change', handleCodeChange);
 
       return () => {
-        socket.off('code-change', handleCodeChange);
+        activeSocket.off('code-change', handleCodeChange);
       };
     }
-  }, [socketRef.current]);
+  }, [socket]);
 
   return (
     <div className="editor-container">

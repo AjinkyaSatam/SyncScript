@@ -83,7 +83,4 @@ Open **`http://localhost:5000`** in your browser.
 
 ---
 
-## 📜 License
-
-MIT License. Free for personal and commercial use.
 

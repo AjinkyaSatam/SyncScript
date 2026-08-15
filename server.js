@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import vm from 'vm';
 
 dotenv.config();
 
@@ -98,8 +99,17 @@ const JDOODLE_LANG_MAP = {
 app.post('/api/compile', async (req, res) => {
   const { code, language } = req.body;
 
-  if (!code) {
-    return res.status(400).json({ error: 'Code is required for compilation.' });
+  if (code === undefined || code === null) {
+    return res.status(400).json({ error: 'Code parameter is required for compilation.' });
+  }
+
+  if (typeof code === 'string' && code.trim() === '') {
+    return res.json({
+      output: 'Editor is empty. Please enter code to compile.',
+      statusCode: 200,
+      memory: '0 MB',
+      cpuTime: '0.000s',
+    });
   }
 
   const clientId = process.env.JDOODLE_CLIENT_ID;
@@ -133,23 +143,30 @@ app.post('/api/compile', async (req, res) => {
     }
   }
 
-  // Built-in Fallback Runner Engine
+  // Built-in Fallback Sandboxed Engine
   try {
     const startTime = Date.now();
     let output = '';
 
     if (language === 'javascript') {
       const logs = [];
-      const customConsole = {
-        log: (...args) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
-        error: (...args) => logs.push('[ERROR] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
-        warn: (...args) => logs.push('[WARN] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
-        info: (...args) => logs.push('[INFO] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+      const sandbox = {
+        console: {
+          log: (...args) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+          error: (...args) => logs.push('[ERROR] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+          warn: (...args) => logs.push('[WARN] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+          info: (...args) => logs.push('[INFO] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+        },
+        setTimeout,
+        clearTimeout,
       };
 
-      const runFn = new Function('console', code);
-      runFn(customConsole);
-      output = logs.length > 0 ? logs.join('\n') : 'Code executed successfully (no output logged).';
+      const context = vm.createContext(sandbox);
+      const script = new vm.Script(code);
+      
+      // Execute with a 2-second timeout to prevent infinite loops
+      script.runInContext(context, { timeout: 2000 });
+      output = logs.length > 0 ? logs.join('\n') : 'Code executed successfully (no console output).';
     } else {
       output = `[SyncScript Engine - ${language.toUpperCase()}]\nExecution output for ${language}:\n\n` +
                `> Executed successfully in safe environment.\n` +
@@ -165,11 +182,15 @@ app.post('/api/compile', async (req, res) => {
       cpuTime: `${duration}s`,
     });
   } catch (evalError) {
+    let errorMsg = evalError.message;
+    if (evalError.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') {
+      errorMsg = 'Execution Timed Out (2000ms limit exceeded - possible infinite loop).';
+    }
     return res.json({
-      output: `Runtime Error:\n${evalError.stack || evalError.message}`,
+      output: `Runtime Error:\n${errorMsg}`,
       statusCode: 400,
       memory: '0 MB',
-      cpuTime: '0s',
+      cpuTime: '2.000s',
     });
   }
 });
