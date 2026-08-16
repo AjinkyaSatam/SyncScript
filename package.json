@@ -9,6 +9,7 @@
     "dev:client": "vite",
     "dev": "concurrently \"node server.js\" \"vite\"",
     "build": "vite build",
+    "postinstall": "npm run build",
     "start": "node server.js"
   },
   "dependencies": {
