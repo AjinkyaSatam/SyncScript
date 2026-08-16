@@ -347,7 +347,9 @@ const EditorPage = () => {
     const currentCode = codeRef.current || DEFAULT_TEMPLATES[language] || '';
 
     try {
-      const res = await axios.post('/api/compile', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+      const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
+      const res = await axios.post(`${cleanBackendUrl}/api/compile`, {
         code: currentCode,
         language,
       });
