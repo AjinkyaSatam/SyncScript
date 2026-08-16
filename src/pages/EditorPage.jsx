@@ -51,6 +51,7 @@ int main() {
 const EditorPage = () => {
   const socketRef = useRef(null);
   const codeRef = useRef(null);
+  const languageRef = useRef('javascript');
   const location = useLocation();
   const { roomId } = useParams();
   const reactNavigator = useNavigate();
@@ -62,6 +63,17 @@ const EditorPage = () => {
   const [consoleStats, setConsoleStats] = useState(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [isConsoleExpanded, setIsConsoleExpanded] = useState(true);
+
+  // Admin & permissions states
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [joinStatus, setJoinStatus] = useState('pending'); // 'pending' | 'approved'
+  const [writeAccess, setWriteAccess] = useState(true);
+  const [joinRequests, setJoinRequests] = useState([]);
+
+  // Sync language ref to prevent closure staleness in socket listener
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
 
   // Guard: If username not provided, redirect home
   if (!location.state || !location.state.username) {
@@ -102,26 +114,103 @@ const EditorPage = () => {
         username,
       });
 
-      // Listen for joined event
-      socketInstance.on('joined', ({ clients, username: joinedUser, socketId }) => {
+      // Handle join approval / lobby states
+      socketInstance.on('join-status', ({ approved, isAdmin: isRoomAdmin, writeAccess: canWrite, isPending, isDenied }) => {
+        if (isDenied) {
+          toast.error('Your request to join this room was denied by the Admin.', { duration: 5000 });
+          reactNavigator('/');
+          return;
+        }
+
+        if (approved) {
+          setJoinStatus('approved');
+          setIsAdmin(isRoomAdmin);
+          setWriteAccess(canWrite);
+        } else if (isPending) {
+          setJoinStatus('pending');
+        }
+      });
+
+      // Listen for approved joined events
+      socketInstance.on('joined', ({ clients: roomClients, username: joinedUser, socketId }) => {
         if (joinedUser !== username) {
           toast.success(`${joinedUser} joined the room.`, {
             icon: '👤',
           });
         }
-        setClients(clients);
+        setClients(roomClients);
 
-        // Sync latest code and language to newly joined client
-        if (codeRef.current) {
-          socketInstance.emit('sync-code', {
-            code: codeRef.current,
+        // Sync latest code and language to newly joined client (only if we are the admin)
+        const myClientInfo = roomClients.find(c => c.socketId === socketInstance.id);
+        if (myClientInfo?.isAdmin) {
+          if (codeRef.current) {
+            socketInstance.emit('sync-code', {
+              code: codeRef.current,
+              socketId,
+            });
+          }
+          socketInstance.emit('sync-language', {
+            language: languageRef.current,
             socketId,
           });
         }
-        socketInstance.emit('sync-language', {
-          language,
-          socketId,
+      });
+
+      // Listen for socket events to update active clients array
+      socketInstance.on('clients-updated', ({ clients: updatedClients }) => {
+        setClients(updatedClients);
+      });
+
+      // Lobby Join Requests (Admin only)
+      socketInstance.on('join-request', ({ socketId, username: reqUser }) => {
+        setJoinRequests((prev) => {
+          if (prev.some((req) => req.socketId === socketId)) return prev;
+          return [...prev, { socketId, username: reqUser }];
         });
+        toast(`User ${reqUser} is requesting to join the room.`, { icon: '⏳' });
+      });
+
+      socketInstance.on('join-request-cancelled', ({ socketId }) => {
+        setJoinRequests((prev) => prev.filter((req) => req.socketId !== socketId));
+      });
+
+      socketInstance.on('pending-queue-update', ({ pending }) => {
+        setJoinRequests(pending);
+      });
+
+      // Write permission updates
+      socketInstance.on('write-access-changed', ({ writeAccess: hasWrite }) => {
+        setWriteAccess(hasWrite);
+        if (hasWrite) {
+          toast.success('Your write access has been restored! You can edit code now.', { icon: '✏️' });
+        } else {
+          toast.error('Your write access has been revoked. You are now in Read-Only mode.', { icon: '🔒' });
+        }
+      });
+
+      // Handle kicks
+      socketInstance.on('kicked', () => {
+        toast.error('You have been removed from the room by the Admin.', { icon: '🚪', duration: 5000 });
+        reactNavigator('/');
+      });
+
+      // Receive Admin compilation output sync
+      socketInstance.on('compile-result', ({ output, stats }) => {
+        setConsoleOutput(output || 'No output returned.');
+        setConsoleStats(stats);
+        setIsConsoleExpanded(true);
+        toast.info('Admin executed code. Execution console updated.', { icon: '💻' });
+      });
+
+      // Promotion & admin ownership switches
+      socketInstance.on('admin-promoted', ({ pendingRequests }) => {
+        setIsAdmin(true);
+        setJoinRequests(pendingRequests || []);
+        toast.success('You have been promoted to Room Admin!', { icon: '👑', duration: 6000 });
+      });
+
+      socketInstance.on('admin-changed', ({ adminName }) => {
+        toast.success(`${adminName} is now the Admin of this room.`, { icon: '👑' });
       });
 
       // Listen for language change sync from other users
@@ -131,9 +220,11 @@ const EditorPage = () => {
 
       // Listen for user leaving room
       socketInstance.on('disconnected', ({ socketId, username: leftUser }) => {
-        toast(`${leftUser || 'A user'} left the room.`, {
-          icon: '👋',
-        });
+        if (leftUser) {
+          toast(`${leftUser} left the room.`, {
+            icon: '👋',
+          });
+        }
         setClients((prev) => prev.filter((client) => client.socketId !== socketId));
       });
     };
@@ -150,11 +241,23 @@ const EditorPage = () => {
         currentSocket.off('language-change');
         currentSocket.off('connect_error');
         currentSocket.off('connect_failed');
+        currentSocket.off('join-status');
+        currentSocket.off('join-request');
+        currentSocket.off('join-request-cancelled');
+        currentSocket.off('pending-queue-update');
+        currentSocket.off('write-access-changed');
+        currentSocket.off('clients-updated');
+        currentSocket.off('kicked');
+        currentSocket.off('compile-result');
+        currentSocket.off('admin-promoted');
+        currentSocket.off('admin-changed');
       }
     };
   }, []);
 
   const handleLanguageChange = (e) => {
+    if (!isAdmin) return; // double-check safety
+    
     const selectedLang = e.target.value;
     setLanguage(selectedLang);
 
@@ -203,6 +306,38 @@ const EditorPage = () => {
     reactNavigator('/');
   };
 
+  // Lobby actions (Admin)
+  const handleApproveJoin = (targetSocketId) => {
+    if (socketRef.current) {
+      socketRef.current.emit('approve-join', { targetSocketId });
+      setJoinRequests((prev) => prev.filter((r) => r.socketId !== targetSocketId));
+    }
+  };
+
+  const handleDenyJoin = (targetSocketId) => {
+    if (socketRef.current) {
+      socketRef.current.emit('deny-join', { targetSocketId });
+      setJoinRequests((prev) => prev.filter((r) => r.socketId !== targetSocketId));
+    }
+  };
+
+  // User permission/action managers (Admin)
+  const handleToggleWriteAccess = (targetSocketId, currentAccess) => {
+    if (socketRef.current) {
+      socketRef.current.emit('toggle-write-access', {
+        targetSocketId,
+        writeAccess: !currentAccess,
+      });
+    }
+  };
+
+  const handleKickUser = (targetSocketId) => {
+    const confirmKick = window.confirm('Are you sure you want to remove this user from the room?');
+    if (confirmKick && socketRef.current) {
+      socketRef.current.emit('kick-user', { targetSocketId });
+    }
+  };
+
   const compileCode = async () => {
     setIsCompiling(true);
     setIsConsoleExpanded(true);
@@ -217,12 +352,24 @@ const EditorPage = () => {
         language,
       });
 
-      setConsoleOutput(res.data.output || 'No output returned.');
-      setConsoleStats({
+      const finalOutput = res.data.output || 'No output returned.';
+      const finalStats = {
         statusCode: res.data.statusCode || 200,
         memory: res.data.memory,
         cpuTime: res.data.cpuTime,
-      });
+      };
+
+      setConsoleOutput(finalOutput);
+      setConsoleStats(finalStats);
+
+      // If we are the admin, broadcast compilation results to the whole room
+      if (isAdmin && socketRef.current) {
+        socketRef.current.emit('compile-result', {
+          roomId,
+          output: finalOutput,
+          stats: finalStats,
+        });
+      }
 
       if (res.data.statusCode === 200) {
         toast.success('Code executed successfully!');
@@ -231,13 +378,58 @@ const EditorPage = () => {
       }
     } catch (err) {
       console.error('Compilation error', err);
-      setConsoleOutput(`Error executing code:\n${err.response?.data?.error || err.message}`);
-      setConsoleStats({ statusCode: 500 });
+      const errOutput = `Error executing code:\n${err.response?.data?.error || err.message}`;
+      const errStats = { statusCode: 500 };
+      
+      setConsoleOutput(errOutput);
+      setConsoleStats(errStats);
+      
+      if (isAdmin && socketRef.current) {
+        socketRef.current.emit('compile-result', {
+          roomId,
+          output: errOutput,
+          stats: errStats,
+        });
+      }
+      
       toast.error('Compilation request failed.');
     } finally {
       setIsCompiling(false);
     }
   };
+
+  // Render pending lobby overlay if user is waiting for approval
+  if (joinStatus === 'pending') {
+    return (
+      <div className="lobby-overlay">
+        <div className="lobby-container">
+          <div className="lobby-logo-wrapper">
+            <Logo size="large" />
+          </div>
+          <div className="lobby-spinner-wrapper">
+            <div className="lobby-spinner"></div>
+          </div>
+          <h2 className="lobby-title">Entry Request Pending</h2>
+          <p className="lobby-desc">
+            Your request to join this room has been sent. Please wait for the Room Admin to grant access.
+          </p>
+          <div className="lobby-details">
+            <div className="detail-item">
+              <span className="detail-label">Room ID</span>
+              <span className="detail-val font-mono">{roomId}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Your Username</span>
+              <span className="detail-val">{username}</span>
+            </div>
+          </div>
+          <button className="btn btn-danger btn-cancel-lobby" onClick={leaveRoom}>
+            Cancel Request
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="editor-page-wrapper">
@@ -250,17 +442,19 @@ const EditorPage = () => {
           </span>
         </div>
 
-        {/* Language Selector */}
+        {/* Language Selector (Disabled for non-admin users) */}
         <div className="sidebar-section">
           <label className="sidebar-label" htmlFor="languageSelect">
             <span>🌐</span> Programming Language
           </label>
-          <div className="select-wrapper">
+          <div className={`select-wrapper ${!isAdmin ? 'disabled' : ''}`}>
             <select
               id="languageSelect"
               className="language-dropdown"
               value={language}
               onChange={handleLanguageChange}
+              disabled={!isAdmin}
+              title={!isAdmin ? 'Only the Room Admin can change the language' : ''}
             >
               <option value="javascript">JavaScript (Node.js)</option>
               <option value="python">Python 3</option>
@@ -270,6 +464,40 @@ const EditorPage = () => {
             </select>
           </div>
         </div>
+
+        {/* Lobby Pending Join Queue (Admin Only) */}
+        {isAdmin && joinRequests.length > 0 && (
+          <div className="sidebar-section lobby-section">
+            <div className="sidebar-label">
+              <span className="ping-dot"></span> Join Requests ({joinRequests.length})
+            </div>
+            <div className="requests-list">
+              {joinRequests.map((req) => (
+                <div className="request-card" key={req.socketId}>
+                  <div className="request-info">
+                    <span className="request-name" title={req.username}>{req.username}</span>
+                  </div>
+                  <div className="request-actions">
+                    <button
+                      className="btn-req approve"
+                      onClick={() => handleApproveJoin(req.socketId)}
+                      title="Approve"
+                    >
+                      ✔
+                    </button>
+                    <button
+                      className="btn-req deny"
+                      onClick={() => handleDenyJoin(req.socketId)}
+                      title="Deny"
+                    >
+                      ✖
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Connected Active Users */}
         <div className="sidebar-section clients-section">
@@ -283,6 +511,11 @@ const EditorPage = () => {
                 username={client.username}
                 socketId={client.socketId}
                 isCurrent={client.username === username}
+                isAdmin={client.isAdmin}
+                isCurrentUserAdmin={isAdmin}
+                writeAccess={client.writeAccess}
+                onToggleWrite={handleToggleWriteAccess}
+                onKick={handleKickUser}
               />
             ))}
           </div>
@@ -309,8 +542,12 @@ const EditorPage = () => {
       <main className="editor-main">
         <div className="editor-header-bar">
           <div className="editor-mode-indicator">
-            <span className="mode-dot"></span>
-            <span>Editing in <strong>{language.toUpperCase()}</strong></span>
+            <span className={`mode-dot ${!writeAccess ? 'mode-dot-readonly' : ''}`}></span>
+            <span>
+              Editing in <strong>{language.toUpperCase()}</strong> 
+              {!writeAccess && <span className="readonly-status-tag"> (Read-Only Mode)</span>}
+              {isAdmin && <span className="admin-status-tag"> (Admin)</span>}
+            </span>
           </div>
           <div className="room-id-display">
             <span>ROOM: {roomId}</span>
@@ -324,6 +561,7 @@ const EditorPage = () => {
             socket={socket}
             roomId={roomId}
             language={language}
+            writeAccess={writeAccess}
             onCodeChange={(code) => {
               codeRef.current = code;
             }}

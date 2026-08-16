@@ -30,7 +30,7 @@ const getCodeMirrorMode = (lang) => {
   }
 };
 
-const Editor = ({ socketRef, socket, roomId, onCodeChange, language }) => {
+const Editor = ({ socketRef, socket, roomId, onCodeChange, language, writeAccess }) => {
   const editorRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -48,6 +48,7 @@ const Editor = ({ socketRef, socket, roomId, onCodeChange, language }) => {
         lineWrapping: true,
         indentUnit: 4,
         tabSize: 4,
+        readOnly: !writeAccess, // Initialize readOnly status
       });
 
       // Track typing changes and emit socket event
@@ -74,6 +75,13 @@ const Editor = ({ socketRef, socket, roomId, onCodeChange, language }) => {
       }
     };
   }, []);
+
+  // Update readOnly status dynamically when writeAccess changes
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.setOption('readOnly', !writeAccess);
+    }
+  }, [writeAccess]);
 
   // Update language mode dynamically when language prop changes
   useEffect(() => {
