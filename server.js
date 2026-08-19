@@ -7,6 +7,9 @@ import cors from 'cors';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import vm from 'vm';
+import fs from 'fs';
+import os from 'os';
+import { exec } from 'child_process';
 
 dotenv.config();
 
@@ -331,7 +334,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// Code Compiler Endpoint (JDoodle + Fallback Engine)
+// Code Compiler Endpoint (JDoodle + Built-in Execution Engine)
 const JDOODLE_LANG_MAP = {
   javascript: { language: 'nodejs', versionIndex: '4' },
   python: { language: 'python3', versionIndex: '4' },
@@ -339,6 +342,119 @@ const JDOODLE_LANG_MAP = {
   c: { language: 'c', versionIndex: '5' },
   cpp: { language: 'cpp17', versionIndex: '1' },
 };
+
+const tempExecDir = path.join(os.tmpdir(), 'syncscript_exec');
+if (!fs.existsSync(tempExecDir)) {
+  try { fs.mkdirSync(tempExecDir, { recursive: true }); } catch (e) {}
+}
+
+function executeCodeLocally(language, code) {
+  return new Promise((resolve) => {
+    const id = Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const lang = (language || 'javascript').toLowerCase();
+
+    if (lang === 'javascript') {
+      try {
+        const logs = [];
+        const sandbox = {
+          console: {
+            log: (...args) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+            error: (...args) => logs.push('[ERROR] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+            warn: (...args) => logs.push('[WARN] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+            info: (...args) => logs.push('[INFO] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+          },
+          setTimeout,
+          clearTimeout,
+        };
+        const context = vm.createContext(sandbox);
+        const script = new vm.Script(code);
+        script.runInContext(context, { timeout: 3000 });
+        const output = logs.length > 0 ? logs.join('\n') : 'Code executed successfully (no output).';
+        resolve({ output, statusCode: 200 });
+      } catch (evalErr) {
+        let errorMsg = evalErr.message;
+        if (evalErr.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') {
+          errorMsg = 'Execution Timed Out (3000ms limit exceeded).';
+        }
+        resolve({ output: `Runtime Error:\n${errorMsg}`, statusCode: 400 });
+      }
+      return;
+    }
+
+    if (lang === 'python') {
+      const srcFile = path.join(tempExecDir, `script_${id}.py`);
+      fs.writeFileSync(srcFile, code);
+      exec(`python "${srcFile}"`, { timeout: 5000 }, (err, stdout, stderr) => {
+        if (err && err.code === 'ENOENT') {
+          exec(`python3 "${srcFile}"`, { timeout: 5000 }, (err2, stdout2, stderr2) => {
+            try { if (fs.existsSync(srcFile)) fs.unlinkSync(srcFile); } catch (e) {}
+            if (err2 && err2.killed) return resolve({ output: 'Execution timed out (5s limit exceeded).', statusCode: 400 });
+            const out = (stdout2 || '') + (stderr2 || '');
+            resolve({ output: out.trim() || 'Code executed successfully (no output).', statusCode: err2 ? 400 : 200 });
+          });
+          return;
+        }
+        try { if (fs.existsSync(srcFile)) fs.unlinkSync(srcFile); } catch (e) {}
+        if (err && err.killed) return resolve({ output: 'Execution timed out (5s limit exceeded).', statusCode: 400 });
+        const out = (stdout || '') + (stderr || '');
+        resolve({ output: out.trim() || 'Code executed successfully (no output).', statusCode: err ? 400 : 200 });
+      });
+      return;
+    }
+
+    if (lang === 'c' || lang === 'cpp') {
+      const ext = lang === 'cpp' ? 'cpp' : 'c';
+      const compiler = lang === 'cpp' ? 'g++' : 'gcc';
+      const srcFile = path.join(tempExecDir, `src_${id}.${ext}`);
+      const exeFile = path.join(tempExecDir, `bin_${id}.exe`);
+      fs.writeFileSync(srcFile, code);
+
+      exec(`${compiler} "${srcFile}" -o "${exeFile}"`, { timeout: 8000 }, (compileErr, cStdout, cStderr) => {
+        if (compileErr) {
+          try { if (fs.existsSync(srcFile)) fs.unlinkSync(srcFile); } catch (e) {}
+          const errMsg = cStderr || cStdout || compileErr.message;
+          return resolve({ output: `Compilation Error:\n${errMsg.trim()}`, statusCode: 400 });
+        }
+        exec(`"${exeFile}"`, { timeout: 5000 }, (runErr, rStdout, rStderr) => {
+          try {
+            if (fs.existsSync(srcFile)) fs.unlinkSync(srcFile);
+            if (fs.existsSync(exeFile)) fs.unlinkSync(exeFile);
+          } catch (e) {}
+          if (runErr && runErr.killed) return resolve({ output: 'Execution timed out (5s limit exceeded).', statusCode: 400 });
+          const out = (rStdout || '') + (rStderr || '');
+          resolve({ output: out.trim() || 'Code executed successfully (no output).', statusCode: runErr ? 400 : 200 });
+        });
+      });
+      return;
+    }
+
+    if (lang === 'java') {
+      const classMatch = code.match(/public\s+class\s+([A-Za-z0-9_]+)/);
+      const className = classMatch ? classMatch[1] : 'Main';
+      const javaFolder = path.join(tempExecDir, `java_${id}`);
+      try { fs.mkdirSync(javaFolder, { recursive: true }); } catch (e) {}
+      const javaFile = path.join(javaFolder, `${className}.java`);
+      fs.writeFileSync(javaFile, code);
+
+      exec(`javac "${javaFile}"`, { timeout: 8000 }, (compileErr, cStdout, cStderr) => {
+        if (compileErr) {
+          try { fs.rmSync(javaFolder, { recursive: true, force: true }); } catch (e) {}
+          const errMsg = cStderr || cStdout || compileErr.message;
+          return resolve({ output: `Compilation Error:\n${errMsg.trim()}`, statusCode: 400 });
+        }
+        exec(`java -cp "${javaFolder}" ${className}`, { timeout: 5000 }, (runErr, rStdout, rStderr) => {
+          try { fs.rmSync(javaFolder, { recursive: true, force: true }); } catch (e) {}
+          if (runErr && runErr.killed) return resolve({ output: 'Execution timed out (5s limit exceeded).', statusCode: 400 });
+          const out = (rStdout || '') + (rStderr || '');
+          resolve({ output: out.trim() || 'Code executed successfully (no output).', statusCode: runErr ? 400 : 200 });
+        });
+      });
+      return;
+    }
+
+    resolve({ output: `Unsupported language: ${language}`, statusCode: 400 });
+  });
+}
 
 app.post('/api/compile', async (req, res) => {
   const { code, language } = req.body;
@@ -387,56 +503,17 @@ app.post('/api/compile', async (req, res) => {
     }
   }
 
-  // Built-in Fallback Sandboxed Engine
-  try {
-    const startTime = Date.now();
-    let output = '';
+  // Execute using built-in local execution engine
+  const startTime = Date.now();
+  const result = await executeCodeLocally(language, code);
+  const duration = ((Date.now() - startTime) / 1000).toFixed(3);
 
-    if (language === 'javascript') {
-      const logs = [];
-      const sandbox = {
-        console: {
-          log: (...args) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
-          error: (...args) => logs.push('[ERROR] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
-          warn: (...args) => logs.push('[WARN] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
-          info: (...args) => logs.push('[INFO] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
-        },
-        setTimeout,
-        clearTimeout,
-      };
-
-      const context = vm.createContext(sandbox);
-      const script = new vm.Script(code);
-      
-      // Execute with a 2-second timeout to prevent infinite loops
-      script.runInContext(context, { timeout: 2000 });
-      output = logs.length > 0 ? logs.join('\n') : 'Code executed successfully (no console output).';
-    } else {
-      output = `[SyncScript Engine - ${language.toUpperCase()}]\nExecution output for ${language}:\n\n` +
-               `> Executed successfully in safe environment.\n` +
-               `(Note: To enable live remote JDoodle compilation for non-JS languages, set JDOODLE_CLIENT_ID and JDOODLE_CLIENT_SECRET in .env)\n\n` +
-               `Source preview:\n${code.substring(0, 150)}${code.length > 150 ? '...' : ''}`;
-    }
-
-    const duration = ((Date.now() - startTime) / 1000).toFixed(3);
-    return res.json({
-      output: output,
-      statusCode: 200,
-      memory: '12 MB',
-      cpuTime: `${duration}s`,
-    });
-  } catch (evalError) {
-    let errorMsg = evalError.message;
-    if (evalError.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') {
-      errorMsg = 'Execution Timed Out (2000ms limit exceeded - possible infinite loop).';
-    }
-    return res.json({
-      output: `Runtime Error:\n${errorMsg}`,
-      statusCode: 400,
-      memory: '0 MB',
-      cpuTime: '2.000s',
-    });
-  }
+  return res.json({
+    output: result.output,
+    statusCode: result.statusCode,
+    memory: '12 MB',
+    cpuTime: `${duration}s`,
+  });
 });
 
 // Serve static frontend assets in production

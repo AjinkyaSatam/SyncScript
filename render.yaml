@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: syncscript
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18.0.0
+      - key: JDOODLE_CLIENT_ID
+        sync: false
+      - key: JDOODLE_CLIENT_SECRET
+        sync: false
