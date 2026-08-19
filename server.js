@@ -29,9 +29,24 @@ app.use(cors());
 app.use(express.json());
 
 // In-memory mappings
-const userSocketMap = {};     // socketId -> { username, roomId, writeAccess, approved }
+const userSocketMap = {};     // socketId -> { username, roomId, writeAccess, approved, color }
 const roomAdminMap = {};      // roomId -> adminSocketId
 const pendingUsersMap = {};   // roomId -> [ { socketId, username } ]
+
+const USER_COLORS = [
+  '#FF5733', '#33FF57', '#3357FF', '#F39C12', '#9B59B6',
+  '#1ABC9C', '#E74C3C', '#2ECC71', '#3498DB', '#E67E22',
+  '#FD79A8', '#6C5CE7', '#00CEC9', '#00B894', '#E17055'
+];
+
+function getRandomUserColor(socketId) {
+  let hash = 0;
+  for (let i = 0; i < socketId.length; i++) {
+    hash = socketId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % USER_COLORS.length;
+  return USER_COLORS[index];
+}
 
 function getAllConnectedClients(roomId) {
   const room = io.sockets.adapter.rooms.get(roomId);
@@ -47,6 +62,7 @@ function getAllConnectedClients(roomId) {
         isAdmin: socketId === adminSocketId,
         writeAccess: user.writeAccess,
         approved: user.approved,
+        color: user.color || getRandomUserColor(socketId),
       };
     })
     .filter(Boolean);
@@ -64,13 +80,14 @@ io.on('connection', (socket) => {
     if (isFirstUser) {
       // Creator becomes Admin automatically
       roomAdminMap[roomId] = socket.id;
-      userSocketMap[socket.id] = { username, roomId, writeAccess: true, approved: true };
+      const color = getRandomUserColor(socket.id);
+      userSocketMap[socket.id] = { username, roomId, writeAccess: true, approved: true, color };
       socket.join(roomId);
 
       const clients = getAllConnectedClients(roomId);
       
       // Notify the joiner they are approved and Admin
-      socket.emit('join-status', { approved: true, isAdmin: true, writeAccess: true });
+      socket.emit('join-status', { approved: true, isAdmin: true, writeAccess: true, color });
 
       // Notify all users in room including the joiner with full updated list
       io.in(roomId).emit('joined', {
@@ -82,7 +99,8 @@ io.on('connection', (socket) => {
       console.log(`[Socket] Room ${roomId} created. Admin: ${username} (${socket.id})`);
     } else {
       // Put in lobby pending approval
-      userSocketMap[socket.id] = { username, roomId, writeAccess: true, approved: false };
+      const color = getRandomUserColor(socket.id);
+      userSocketMap[socket.id] = { username, roomId, writeAccess: true, approved: false, color };
       
       if (!pendingUsersMap[roomId]) {
         pendingUsersMap[roomId] = [];
@@ -236,6 +254,18 @@ io.on('connection', (socket) => {
     // Security check: only users with writeAccess and approval can emit code-change
     if (user && user.approved && user.writeAccess) {
       socket.in(roomId).emit('code-change', { code });
+    }
+  });
+
+  socket.on('cursor-position', ({ roomId, cursor }) => {
+    const user = userSocketMap[socket.id];
+    if (user && user.approved) {
+      socket.in(roomId).emit('cursor-position', {
+        socketId: socket.id,
+        username: user.username,
+        color: user.color || getRandomUserColor(socket.id),
+        cursor,
+      });
     }
   });
 
