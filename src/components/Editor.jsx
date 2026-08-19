@@ -103,7 +103,9 @@ const Editor = ({ socketRef, socket, roomId, onCodeChange, language, writeAccess
     }
   }, [language]);
 
-  // Listen to real-time incoming code changes from socket
+  const remoteCursorsRef = useRef({});
+
+  // Listen to real-time incoming code changes and remote cursor movements from socket
   useEffect(() => {
     const activeSocket = socket || socketRef?.current;
 
@@ -117,10 +119,47 @@ const Editor = ({ socketRef, socket, roomId, onCodeChange, language, writeAccess
         }
       };
 
+      const handleCursorPosition = ({ socketId, username, color, cursor }) => {
+        if (!editorRef.current || !cursor || socketId === activeSocket.id) return;
+
+        // Clear existing bookmark for this user
+        if (remoteCursorsRef.current[socketId]) {
+          remoteCursorsRef.current[socketId].clear();
+        }
+
+        // Create remote cursor element
+        const cursorEl = document.createElement('span');
+        cursorEl.className = 'remote-cursor-widget';
+        cursorEl.style.borderLeftColor = color || '#FF5733';
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'remote-cursor-badge';
+        labelEl.style.backgroundColor = color || '#FF5733';
+        labelEl.innerText = username || 'User';
+
+        cursorEl.appendChild(labelEl);
+
+        try {
+          const bookmark = editorRef.current.setBookmark(
+            { line: cursor.line, ch: cursor.ch },
+            { widget: cursorEl, insertLeft: true }
+          );
+          remoteCursorsRef.current[socketId] = bookmark;
+        } catch (e) {
+          console.error('[Remote Cursor Error]', e);
+        }
+      };
+
       activeSocket.on('code-change', handleCodeChange);
+      activeSocket.on('cursor-position', handleCursorPosition);
 
       return () => {
         activeSocket.off('code-change', handleCodeChange);
+        activeSocket.off('cursor-position', handleCursorPosition);
+
+        // Clear all remote cursors on unmount
+        Object.values(remoteCursorsRef.current).forEach((bm) => bm && bm.clear());
+        remoteCursorsRef.current = {};
       };
     }
   }, [socket]);
