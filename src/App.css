@@ -70,10 +70,10 @@ body, html, #root {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--bg-card);
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--border-highlight);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -192,7 +192,7 @@ body, html, #root {
 }
 
 .form-card {
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--bg-card);
   backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -238,7 +238,7 @@ body, html, #root {
 .input-field {
   width: 100%;
   padding: 14px 18px;
-  background-color: rgba(9, 13, 22, 0.7);
+  background-color: var(--bg-sidebar);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-primary);
@@ -532,7 +532,7 @@ body, html, #root {
   gap: 12px;
   padding: 8px 12px;
   border-radius: var(--radius-md);
-  background-color: rgba(15, 23, 42, 0.6);
+  background-color: var(--bg-card);
   border: 1px solid transparent;
   transition: all var(--transition-fast);
 }
@@ -655,7 +655,7 @@ body, html, #root {
 
 .editor-header-bar {
   height: 48px;
-  background-color: #0d1322;
+  background-color: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
@@ -702,21 +702,15 @@ body, html, #root {
   font-family: var(--font-code) !important;
   font-size: 15px !important;
   line-height: 1.6 !important;
-  background-color: #080c16 !important;
 }
 
 .CodeMirror-gutters {
-  background-color: #0d1322 !important;
   border-right: 1px solid var(--border-color) !important;
-}
-
-.CodeMirror-linenumber {
-  color: #475569 !important;
 }
 
 /* Console Output Panel */
 .console-panel {
-  background-color: #0b1120;
+  background-color: var(--bg-sidebar);
   border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -738,7 +732,7 @@ body, html, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: #0f172a;
+  background-color: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
   cursor: pointer;
   user-select: none;
@@ -816,13 +810,13 @@ body, html, #root {
   overflow-y: auto;
   font-family: var(--font-code);
   font-size: 13px;
-  background-color: #080c16;
+  background-color: var(--bg-card);
 }
 
 .output-content {
   white-space: pre-wrap;
   word-break: break-word;
-  color: #e2e8f0;
+  color: var(--text-primary);
   line-height: 1.5;
 }
 
@@ -850,7 +844,7 @@ body, html, #root {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: radial-gradient(circle at center, rgba(11, 17, 32, 0.96) 0%, rgba(7, 10, 18, 0.99) 100%);
+  background: var(--bg-dark);
   backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
@@ -1111,7 +1105,7 @@ body, html, #root {
 }
 
 .btn-client-action {
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   font-size: 11px;
