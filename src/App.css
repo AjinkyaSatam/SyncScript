@@ -959,7 +959,7 @@ body, html, #root {
 }
 
 .lobby-section .sidebar-label {
-  color: #fca5a5;
+  color: #ef4444;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -986,7 +986,7 @@ body, html, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(15, 23, 42, 0.8);
+  background: var(--bg-card);
   border: 1px solid rgba(239, 68, 68, 0.1);
   padding: 8px 10px;
   border-radius: var(--radius-sm);
