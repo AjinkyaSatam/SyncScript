@@ -64,6 +64,7 @@ const EditorPage = () => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [isConsoleExpanded, setIsConsoleExpanded] = useState(true);
   const [mySocketId, setMySocketId] = useState('');
+  const [editorTheme, setEditorTheme] = useState(() => localStorage.getItem('editorTheme') || 'dracula');
 
   // Admin & permissions states
   const [isAdmin, setIsAdmin] = useState(false);
@@ -296,22 +297,18 @@ const EditorPage = () => {
   }, []);
 
   const handleLanguageChange = (e) => {
-    if (!isAdmin) return; // double-check safety
-    
-    const selectedLang = e.target.value;
-    setLanguage(selectedLang);
-
-    // Sync language selection across all connected sockets in room
+    const newLang = e.target.value;
+    setLanguage(newLang);
     if (socketRef.current) {
       socketRef.current.emit('language-change', {
         roomId,
-        language: selectedLang,
+        language: newLang,
       });
     }
 
     // Set default code template if editor is empty or on default template
     if (!codeRef.current || Object.values(DEFAULT_TEMPLATES).includes(codeRef.current)) {
-      const template = DEFAULT_TEMPLATES[selectedLang] || '';
+      const template = DEFAULT_TEMPLATES[newLang] || '';
       codeRef.current = template;
       if (socketRef.current) {
         socketRef.current.emit('code-change', {
@@ -320,6 +317,12 @@ const EditorPage = () => {
         });
       }
     }
+  };
+
+  const handleThemeChange = (e) => {
+    const newTheme = e.target.value;
+    setEditorTheme(newTheme);
+    localStorage.setItem('editorTheme', newTheme);
   };
 
   const copyRoomId = async () => {
@@ -527,6 +530,27 @@ const EditorPage = () => {
           </div>
         </div>
 
+        {/* Theme Selector (Local to each user) */}
+        <div className="sidebar-section">
+          <label className="sidebar-label" htmlFor="themeSelect">
+            <span>🎨</span> Editor Theme
+          </label>
+          <div className="select-wrapper">
+            <select
+              id="themeSelect"
+              className="language-dropdown"
+              value={editorTheme}
+              onChange={handleThemeChange}
+            >
+              <option value="dracula">Dracula (Dark)</option>
+              <option value="monokai">Monokai (Dark)</option>
+              <option value="material">Material (Dark)</option>
+              <option value="eclipse">Eclipse (Light)</option>
+              <option value="github">GitHub (Light)</option>
+            </select>
+          </div>
+        </div>
+
         {/* Lobby Pending Join Queue (Admin Only) */}
         {isAdmin && joinRequests.length > 0 && (
           <div className="sidebar-section lobby-section">
@@ -655,6 +679,7 @@ const EditorPage = () => {
                   socket={socket}
                   roomId={roomId}
                   language={language}
+                  theme={editorTheme}
                   writeAccess={canWriteEffective}
                   onCodeChange={(code) => {
                     codeRef.current = code;
