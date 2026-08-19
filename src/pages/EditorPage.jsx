@@ -69,7 +69,7 @@ const EditorPage = () => {
 
   // Admin & permissions states
   const [isAdmin, setIsAdmin] = useState(false);
-  const [joinStatus, setJoinStatus] = useState('pending'); // 'pending' | 'approved'
+  const [joinStatus, setJoinStatus] = useState('connecting'); // 'connecting' | 'pending' | 'approved'
   const [writeAccess, setWriteAccess] = useState(true);
   const [joinRequests, setJoinRequests] = useState([]);
   const [singleWriterState, setSingleWriterState] = useState({
@@ -457,6 +457,15 @@ const EditorPage = () => {
       setIsCompiling(false);
     }
   };
+
+  // Render loading screen while establishing socket connection
+  if (joinStatus === 'connecting') {
+    return (
+      <div className="editor-page-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Logo size="large" />
+      </div>
+    );
+  }
 
   // Render pending lobby overlay if user is waiting for approval
   if (joinStatus === 'pending') {
