@@ -65,6 +65,18 @@ const Editor = ({ socketRef, socket, roomId, onCodeChange, language, writeAccess
           });
         }
       });
+
+      // Track cursor position movement and emit to room
+      editorRef.current.on('cursorActivity', (instance) => {
+        const cursor = instance.getCursor();
+        const currentSocket = socket || socketRef?.current;
+        if (currentSocket) {
+          currentSocket.emit('cursor-position', {
+            roomId,
+            cursor: { line: cursor.line, ch: cursor.ch },
+          });
+        }
+      });
     }
 
     initEditor();
