@@ -6,7 +6,7 @@ import 'codemirror/theme/dracula.css';
 import 'codemirror/theme/monokai.css';
 import 'codemirror/theme/eclipse.css';
 import 'codemirror/theme/material.css';
-import 'codemirror/theme/github.css';
+import 'codemirror/theme/idea.css';
 
 // Language modes
 import 'codemirror/mode/javascript/javascript';

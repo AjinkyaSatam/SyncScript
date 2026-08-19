@@ -546,7 +546,7 @@ const EditorPage = () => {
               <option value="monokai">Monokai (Dark)</option>
               <option value="material">Material (Dark)</option>
               <option value="eclipse">Eclipse (Light)</option>
-              <option value="github">GitHub (Light)</option>
+              <option value="idea">IntelliJ Idea (Light)</option>
             </select>
           </div>
         </div>
