@@ -69,6 +69,11 @@ const EditorPage = () => {
   const [joinStatus, setJoinStatus] = useState('pending'); // 'pending' | 'approved'
   const [writeAccess, setWriteAccess] = useState(true);
   const [joinRequests, setJoinRequests] = useState([]);
+  const [singleWriterState, setSingleWriterState] = useState({
+    enabled: false,
+    activeTypistSocketId: '',
+    activeTypistUsername: '',
+  });
 
   // Sync language ref to prevent closure staleness in socket listener
   useEffect(() => {
@@ -132,13 +137,16 @@ const EditorPage = () => {
       });
 
       // Listen for approved joined events
-      socketInstance.on('joined', ({ clients: roomClients, username: joinedUser, socketId }) => {
+      socketInstance.on('joined', ({ clients: roomClients, username: joinedUser, socketId, singleWriterState: swState }) => {
         if (joinedUser !== username) {
           toast.success(`${joinedUser} joined the room.`, {
             icon: '👤',
           });
         }
         setClients(roomClients);
+        if (swState) {
+          setSingleWriterState(swState);
+        }
 
         // Sync latest code and language to newly joined client (only if we are the admin)
         const myClientInfo = roomClients.find(c => c.socketId === socketInstance.id);
@@ -216,6 +224,29 @@ const EditorPage = () => {
       // Listen for language change sync from other users
       socketInstance.on('language-change', ({ language: newLang }) => {
         setLanguage(newLang);
+      });
+
+      // Single-Writer socket event listeners
+      socketInstance.on('single-writer-updated', (newState) => {
+        setSingleWriterState(newState);
+      });
+
+      socketInstance.on('typing-control-requested', ({ requesterSocketId, username: requesterName }) => {
+        toast((t) => (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span>✋ <strong>{requesterName}</strong> requested typing control.</span>
+            <button
+              className="btn btn-compile"
+              style={{ padding: '4px 10px', fontSize: '12px' }}
+              onClick={() => {
+                socketRef.current.emit('set-active-typist', { roomId, targetSocketId: requesterSocketId });
+                toast.dismiss(t.id);
+              }}
+            >
+              Grant Control
+            </button>
+          </div>
+        ), { duration: 8000, icon: '✋' });
       });
 
       // Listen for user leaving room
@@ -335,6 +366,26 @@ const EditorPage = () => {
     const confirmKick = window.confirm('Are you sure you want to remove this user from the room?');
     if (confirmKick && socketRef.current) {
       socketRef.current.emit('kick-user', { targetSocketId });
+    }
+  };
+
+  const handleToggleSingleWriterMode = () => {
+    const nextEnabled = !singleWriterState.enabled;
+    if (socketRef.current) {
+      socketRef.current.emit('toggle-single-writer', { roomId, enabled: nextEnabled });
+    }
+  };
+
+  const handleRequestTypingControl = () => {
+    if (socketRef.current) {
+      socketRef.current.emit('request-typing-control', { roomId });
+      toast.success('Requested typing control from active typist!', { icon: '✋' });
+    }
+  };
+
+  const handleSetActiveTypist = (targetSocketId) => {
+    if (socketRef.current) {
+      socketRef.current.emit('set-active-typist', { roomId, targetSocketId });
     }
   };
 
@@ -542,32 +593,65 @@ const EditorPage = () => {
 
       {/* Main Workspace Area */}
       <main className="editor-main">
-        <div className="editor-header-bar">
-          <div className="editor-mode-indicator">
-            <span className={`mode-dot ${!writeAccess ? 'mode-dot-readonly' : ''}`}></span>
-            <span>
-              Editing in <strong>{language.toUpperCase()}</strong> 
-              {!writeAccess && <span className="readonly-status-tag"> (Read-Only Mode)</span>}
-              {isAdmin && <span className="admin-status-tag"> (Admin)</span>}
-            </span>
-          </div>
-          <div className="room-id-display">
-            <span>ROOM: {roomId}</span>
-          </div>
-        </div>
+        {(() => {
+          const canWriteEffective = writeAccess && (!singleWriterState.enabled || singleWriterState.activeTypistSocketId === socketRef.current?.id);
+          return (
+            <>
+              <div className="editor-header-bar">
+                <div className="editor-mode-indicator">
+                  <span className={`mode-dot ${!canWriteEffective ? 'mode-dot-readonly' : ''}`}></span>
+                  <span>
+                    Editing in <strong>{language.toUpperCase()}</strong> 
+                    {!canWriteEffective && <span className="readonly-status-tag"> (Read-Only)</span>}
+                    {isAdmin && <span className="admin-status-tag"> (Admin)</span>}
+                  </span>
+                </div>
 
-        {/* CodeMirror 5 Editor */}
-        <div className="editor-workspace">
-          <Editor
-            socketRef={socketRef}
-            socket={socket}
-            roomId={roomId}
-            language={language}
-            writeAccess={writeAccess}
-            onCodeChange={(code) => {
-              codeRef.current = code;
-            }}
-          />
+                {/* Single-Writer Controls */}
+                <div className="single-writer-controls">
+                  {isAdmin && (
+                    <button
+                      className={`btn-single-writer-toggle ${singleWriterState.enabled ? 'active' : ''}`}
+                      onClick={handleToggleSingleWriterMode}
+                      title="Enforce 1 person typing at a time"
+                    >
+                      {singleWriterState.enabled ? '🔒 Single-Writer: ON' : '🔓 Single-Writer: OFF'}
+                    </button>
+                  )}
+
+                  {singleWriterState.enabled && (
+                    <div className="active-typist-pill">
+                      <span>✏️ Typist: <strong>{singleWriterState.activeTypistUsername || 'Admin'}</strong></span>
+                      {singleWriterState.activeTypistSocketId !== socketRef.current?.id && (
+                        <button className="btn-request-control" onClick={handleRequestTypingControl}>
+                          ✋ Request Control
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="room-id-display">
+                  <span>ROOM: {roomId}</span>
+                </div>
+              </div>
+
+              {/* CodeMirror 5 Editor */}
+              <div className="editor-workspace">
+                <Editor
+                  socketRef={socketRef}
+                  socket={socket}
+                  roomId={roomId}
+                  language={language}
+                  writeAccess={canWriteEffective}
+                  onCodeChange={(code) => {
+                    codeRef.current = code;
+                  }}
+                />
+              </div>
+            </>
+          );
+        })()}
         </div>
 
         {/* Bottom Console Panel */}
