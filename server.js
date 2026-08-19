@@ -32,6 +32,7 @@ app.use(express.json());
 const userSocketMap = {};     // socketId -> { username, roomId, writeAccess, approved, color }
 const roomAdminMap = {};      // roomId -> adminSocketId
 const pendingUsersMap = {};   // roomId -> [ { socketId, username } ]
+const roomSingleWriterMap = {}; // roomId -> { enabled: boolean, activeTypistSocketId: string }
 
 const USER_COLORS = [
   '#FF5733', '#33FF57', '#3357FF', '#F39C12', '#9B59B6',
@@ -46,6 +47,16 @@ function getRandomUserColor(socketId) {
   }
   const index = Math.abs(hash) % USER_COLORS.length;
   return USER_COLORS[index];
+}
+
+function getSingleWriterInfo(roomId) {
+  const state = roomSingleWriterMap[roomId] || { enabled: false, activeTypistSocketId: roomAdminMap[roomId] };
+  const activeTypistUser = userSocketMap[state.activeTypistSocketId];
+  return {
+    enabled: !!state.enabled,
+    activeTypistSocketId: state.activeTypistSocketId || roomAdminMap[roomId],
+    activeTypistUsername: activeTypistUser ? activeTypistUser.username : 'Admin',
+  };
 }
 
 function getAllConnectedClients(roomId) {
@@ -80,6 +91,7 @@ io.on('connection', (socket) => {
     if (isFirstUser) {
       // Creator becomes Admin automatically
       roomAdminMap[roomId] = socket.id;
+      roomSingleWriterMap[roomId] = { enabled: false, activeTypistSocketId: socket.id };
       const color = getRandomUserColor(socket.id);
       userSocketMap[socket.id] = { username, roomId, writeAccess: true, approved: true, color };
       socket.join(roomId);
@@ -94,6 +106,7 @@ io.on('connection', (socket) => {
         clients,
         username,
         socketId: socket.id,
+        singleWriterState: getSingleWriterInfo(roomId),
       });
       
       console.log(`[Socket] Room ${roomId} created. Admin: ${username} (${socket.id})`);
@@ -274,6 +287,50 @@ io.on('connection', (socket) => {
     // Security check: only Admin can change programming language
     if (user && user.approved && roomAdminMap[roomId] === socket.id) {
       io.in(roomId).emit('language-change', { language });
+    }
+  });
+
+  // Single-Writer Control Handlers
+  socket.on('toggle-single-writer', ({ roomId, enabled }) => {
+    const user = userSocketMap[socket.id];
+    if (user && user.approved && roomAdminMap[roomId] === socket.id) {
+      if (!roomSingleWriterMap[roomId]) {
+        roomSingleWriterMap[roomId] = { enabled: false, activeTypistSocketId: socket.id };
+      }
+      roomSingleWriterMap[roomId].enabled = enabled;
+      if (enabled && !roomSingleWriterMap[roomId].activeTypistSocketId) {
+        roomSingleWriterMap[roomId].activeTypistSocketId = socket.id;
+      }
+      io.in(roomId).emit('single-writer-updated', getSingleWriterInfo(roomId));
+    }
+  });
+
+  socket.on('set-active-typist', ({ roomId, targetSocketId }) => {
+    const user = userSocketMap[socket.id];
+    const adminId = roomAdminMap[roomId];
+    const currentTypistId = roomSingleWriterMap[roomId]?.activeTypistSocketId;
+
+    // Only admin or current active typist can transfer control
+    if (user && user.approved && (socket.id === adminId || socket.id === currentTypistId)) {
+      if (!roomSingleWriterMap[roomId]) {
+        roomSingleWriterMap[roomId] = { enabled: true, activeTypistSocketId: targetSocketId };
+      } else {
+        roomSingleWriterMap[roomId].activeTypistSocketId = targetSocketId;
+      }
+      io.in(roomId).emit('single-writer-updated', getSingleWriterInfo(roomId));
+    }
+  });
+
+  socket.on('request-typing-control', ({ roomId }) => {
+    const user = userSocketMap[socket.id];
+    if (!user || !user.approved) return;
+
+    const currentTypistId = roomSingleWriterMap[roomId]?.activeTypistSocketId || roomAdminMap[roomId];
+    if (currentTypistId && currentTypistId !== socket.id) {
+      io.to(currentTypistId).emit('typing-control-requested', {
+        requesterSocketId: socket.id,
+        username: user.username,
+      });
     }
   });
 
