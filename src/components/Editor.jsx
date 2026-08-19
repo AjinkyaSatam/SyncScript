@@ -3,6 +3,10 @@ import CodeMirror from 'codemirror';
 
 import 'codemirror/lib/codemirror.css';
 import 'codemirror/theme/dracula.css';
+import 'codemirror/theme/monokai.css';
+import 'codemirror/theme/eclipse.css';
+import 'codemirror/theme/material.css';
+import 'codemirror/theme/github.css';
 
 // Language modes
 import 'codemirror/mode/javascript/javascript';
@@ -30,7 +34,7 @@ const getCodeMirrorMode = (lang) => {
   }
 };
 
-const Editor = ({ socketRef, socket, roomId, onCodeChange, language, writeAccess }) => {
+const Editor = ({ socketRef, socket, roomId, onCodeChange, language, writeAccess, theme = 'dracula' }) => {
   const editorRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -41,7 +45,7 @@ const Editor = ({ socketRef, socket, roomId, onCodeChange, language, writeAccess
 
       editorRef.current = CodeMirror.fromTextArea(textareaRef.current, {
         mode: getCodeMirrorMode(language),
-        theme: 'dracula',
+        theme: theme,
         autoCloseBrackets: true,
         autoCloseTags: true,
         lineNumbers: true,
@@ -98,10 +102,16 @@ const Editor = ({ socketRef, socket, roomId, onCodeChange, language, writeAccess
   // Update language mode dynamically when language prop changes
   useEffect(() => {
     if (editorRef.current) {
-      const mode = getCodeMirrorMode(language);
-      editorRef.current.setOption('mode', mode);
+      editorRef.current.setOption('mode', getCodeMirrorMode(language));
     }
   }, [language]);
+
+  // Update theme dynamically when theme prop changes
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.setOption('theme', theme);
+    }
+  }, [theme]);
 
   const remoteCursorsRef = useRef({});
 
