@@ -63,6 +63,7 @@ const EditorPage = () => {
   const [consoleStats, setConsoleStats] = useState(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [isConsoleExpanded, setIsConsoleExpanded] = useState(true);
+  const [mySocketId, setMySocketId] = useState('');
 
   // Admin & permissions states
   const [isAdmin, setIsAdmin] = useState(false);
@@ -112,6 +113,14 @@ const EditorPage = () => {
 
       socketInstance.on('connect_error', handleErrors);
       socketInstance.on('connect_failed', handleErrors);
+      
+      if (socketInstance.id) {
+        setMySocketId(socketInstance.id);
+      }
+      
+      socketInstance.on('connect', () => {
+        setMySocketId(socketInstance.id);
+      });
 
       // Emit Join Room event
       socketInstance.emit('join', {
@@ -597,7 +606,7 @@ const EditorPage = () => {
       {/* Main Workspace Area */}
       <main className="editor-main">
         {(() => {
-          const canWriteEffective = writeAccess && (!singleWriterState.enabled || singleWriterState.activeTypistSocketId === socketRef.current?.id);
+          const canWriteEffective = writeAccess && (!singleWriterState.enabled || singleWriterState.activeTypistSocketId === mySocketId);
           return (
             <>
               <div className="editor-header-bar">
@@ -625,7 +634,7 @@ const EditorPage = () => {
                   {singleWriterState.enabled && (
                     <div className="active-typist-pill">
                       <span>✏️ Typist: <strong>{singleWriterState.activeTypistUsername || 'Admin'}</strong></span>
-                      {singleWriterState.activeTypistSocketId !== socketRef.current?.id && (
+                      {singleWriterState.activeTypistSocketId !== mySocketId && (
                         <button className="btn-request-control" onClick={handleRequestTypingControl}>
                           ✋ Request Control
                         </button>
@@ -655,7 +664,6 @@ const EditorPage = () => {
             </>
           );
         })()}
-        </div>
 
         {/* Bottom Console Panel */}
         <OutputPanel
