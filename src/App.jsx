@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, createContext } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
@@ -6,9 +6,26 @@ import Home from './pages/Home';
 import EditorPage from './pages/EditorPage';
 import './App.css';
 
+export const AppThemeContext = createContext();
+
 function App() {
+  const [appTheme, setAppTheme] = useState(() => localStorage.getItem('syncscript_appTheme') || 'dark');
+
+  useEffect(() => {
+    if (appTheme === 'light') {
+      document.body.classList.add('light-theme');
+    } else {
+      document.body.classList.remove('light-theme');
+    }
+    localStorage.setItem('syncscript_appTheme', appTheme);
+  }, [appTheme]);
+
+  const toggleTheme = () => {
+    setAppTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   return (
-    <>
+    <AppThemeContext.Provider value={{ appTheme, toggleTheme }}>
       <div>
         <Toaster
           position="top-right"
@@ -44,7 +61,7 @@ function App() {
           <Route path="/editor/:roomId" element={<EditorPage />} />
         </Routes>
       </Router>
-    </>
+    </AppThemeContext.Provider>
   );
 }
 

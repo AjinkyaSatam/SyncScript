@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
+import { AppThemeContext } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidV4 } from 'uuid';
 import toast from 'react-hot-toast';
@@ -9,6 +10,7 @@ const Home = () => {
 
   const [roomId, setRoomId] = useState('');
   const [username, setUsername] = useState('');
+  const { appTheme, toggleTheme } = useContext(AppThemeContext);
 
   const createNewRoom = (e) => {
     e.preventDefault();
@@ -45,6 +47,13 @@ const Home = () => {
 
   return (
     <div className="home-wrapper">
+      <button 
+        onClick={toggleTheme} 
+        style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}
+        title="Toggle Theme"
+      >
+        {appTheme === 'light' ? '🌙' : '☀️'}
+      </button>
       <div className="home-container">
         {/* Left Panel: Join Form */}
         <div className="home-left">

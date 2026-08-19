@@ -30,6 +30,24 @@
   --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+body.light-theme {
+  --bg-dark: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --bg-sidebar: #f1f5f9;
+  --border-color: #e2e8f0;
+  --border-highlight: #cbd5e1;
+  
+  --primary-cyan: #0ea5e9;
+  --primary-blue: #3b82f6;
+  --accent-green: #059669;
+  --accent-purple: #7c3aed;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

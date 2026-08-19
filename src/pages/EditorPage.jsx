@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import axios from 'axios';
@@ -8,6 +8,7 @@ import Client from '../components/Client';
 import Editor from '../components/Editor';
 import OutputPanel from '../components/OutputPanel';
 import { initSocket } from '../socket';
+import { AppThemeContext } from '../App';
 
 const DEFAULT_TEMPLATES = {
   javascript: `// Welcome to SyncScript Real-Time Code Editor!
@@ -64,7 +65,7 @@ const EditorPage = () => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [isConsoleExpanded, setIsConsoleExpanded] = useState(true);
   const [mySocketId, setMySocketId] = useState('');
-  const [editorTheme, setEditorTheme] = useState(() => localStorage.getItem('editorTheme') || 'dracula');
+  const { appTheme, toggleTheme } = useContext(AppThemeContext);
 
   // Admin & permissions states
   const [isAdmin, setIsAdmin] = useState(false);
@@ -319,12 +320,6 @@ const EditorPage = () => {
     }
   };
 
-  const handleThemeChange = (e) => {
-    const newTheme = e.target.value;
-    setEditorTheme(newTheme);
-    localStorage.setItem('editorTheme', newTheme);
-  };
-
   const copyRoomId = async () => {
     try {
       if (navigator.clipboard && window.isSecureContext) {
@@ -530,25 +525,15 @@ const EditorPage = () => {
           </div>
         </div>
 
-        {/* Theme Selector (Local to each user) */}
+        {/* Theme Toggle Button */}
         <div className="sidebar-section">
-          <label className="sidebar-label" htmlFor="themeSelect">
-            <span>🎨</span> Editor Theme
-          </label>
-          <div className="select-wrapper">
-            <select
-              id="themeSelect"
-              className="language-dropdown"
-              value={editorTheme}
-              onChange={handleThemeChange}
-            >
-              <option value="dracula">Dracula (Dark)</option>
-              <option value="monokai">Monokai (Dark)</option>
-              <option value="material">Material (Dark)</option>
-              <option value="eclipse">Eclipse (Light)</option>
-              <option value="idea">IntelliJ Idea (Light)</option>
-            </select>
-          </div>
+          <button 
+            className="btn btn-secondary" 
+            onClick={toggleTheme}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+          >
+            {appTheme === 'light' ? '🌙 Switch to Dark Mode' : '☀️ Switch to Light Mode'}
+          </button>
         </div>
 
         {/* Lobby Pending Join Queue (Admin Only) */}
@@ -679,7 +664,7 @@ const EditorPage = () => {
                   socket={socket}
                   roomId={roomId}
                   language={language}
-                  theme={editorTheme}
+                  theme={appTheme === 'light' ? 'idea' : 'dracula'}
                   writeAccess={canWriteEffective}
                   onCodeChange={(code) => {
                     codeRef.current = code;
