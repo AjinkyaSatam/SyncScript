@@ -567,7 +567,10 @@ const EditorPage = () => {
                 isAdmin={client.isAdmin}
                 isCurrentUserAdmin={isAdmin}
                 writeAccess={client.writeAccess}
+                isActiveTypist={singleWriterState.activeTypistSocketId === client.socketId}
+                isSingleWriterMode={singleWriterState.enabled}
                 onToggleWrite={handleToggleWriteAccess}
+                onMakeActiveTypist={handleSetActiveTypist}
                 onKick={handleKickUser}
               />
             ))}

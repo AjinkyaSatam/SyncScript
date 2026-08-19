@@ -1222,3 +1222,83 @@ body, html, #root {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
+/* Single-Writer Controls in Header Bar & Client List */
+.single-writer-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-single-writer-toggle {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-single-writer-toggle.active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.btn-single-writer-toggle:hover {
+  border-color: var(--primary-cyan);
+  color: var(--text-primary);
+}
+
+.active-typist-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #34d399;
+}
+
+.btn-request-control {
+  background: rgba(0, 242, 254, 0.15);
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  color: var(--primary-cyan);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-request-control:hover {
+  background: var(--primary-cyan);
+  color: #080c16;
+}
+
+.typist-tag {
+  font-size: 10px;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.client-card.active-typist-card {
+  border-left: 3px solid #10b981;
+}
+
+.btn-typist-assign:hover {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border-color: #10b981;
+}
+
+

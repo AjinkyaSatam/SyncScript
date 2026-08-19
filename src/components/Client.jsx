@@ -10,11 +10,23 @@ const getAvatarColor = (name) => {
   return `hsl(${hue}, 55%, 25%)`;
 };
 
-const Client = ({ username, socketId, isCurrent, isAdmin, isCurrentUserAdmin, writeAccess = true, onToggleWrite, onKick }) => {
+const Client = ({
+  username,
+  socketId,
+  isCurrent,
+  isAdmin,
+  isCurrentUserAdmin,
+  writeAccess = true,
+  isActiveTypist = false,
+  isSingleWriterMode = false,
+  onToggleWrite,
+  onMakeActiveTypist,
+  onKick
+}) => {
   const avatarBg = getAvatarColor(username || 'Anonymous');
 
   return (
-    <div className={`client-card ${isCurrent ? 'current-user' : ''} ${!writeAccess ? 'readonly-user' : ''}`}>
+    <div className={`client-card ${isCurrent ? 'current-user' : ''} ${!writeAccess ? 'readonly-user' : ''} ${isActiveTypist ? 'active-typist-card' : ''}`}>
       <div className="avatar-wrapper">
         <Avatar
           name={username}
@@ -22,7 +34,7 @@ const Client = ({ username, socketId, isCurrent, isAdmin, isCurrentUserAdmin, wr
           round="12px"
           textSizeRatio={2}
           color={avatarBg}
-          fgColor="#00f2fe"
+          fgColor={isActiveTypist ? "#10b981" : "#00f2fe"}
         />
         <span className="online-badge" title="Active in room"></span>
       </div>
@@ -33,6 +45,7 @@ const Client = ({ username, socketId, isCurrent, isAdmin, isCurrentUserAdmin, wr
         </div>
         <div className="client-tags">
           {isCurrent && <span className="current-tag">(You)</span>}
+          {isSingleWriterMode && isActiveTypist && <span className="typist-tag">✏️ Typist</span>}
           {!writeAccess && <span className="readonly-tag">🔒 Read-only</span>}
         </div>
       </div>
@@ -40,12 +53,21 @@ const Client = ({ username, socketId, isCurrent, isAdmin, isCurrentUserAdmin, wr
       {/* Admin management buttons (only visible to admin for other users) */}
       {isCurrentUserAdmin && !isCurrent && (
         <div className="client-actions">
+          {isSingleWriterMode && !isActiveTypist && onMakeActiveTypist && (
+            <button
+              className="btn-client-action btn-typist-assign"
+              onClick={() => onMakeActiveTypist(socketId)}
+              title="Pass Typing Control to User"
+            >
+              ✏️
+            </button>
+          )}
           <button
             className={`btn-client-action ${!writeAccess ? 'btn-write-disabled' : 'btn-write-enabled'}`}
             onClick={() => onToggleWrite(socketId, writeAccess)}
             title={writeAccess ? "Make Read-Only" : "Allow Writing"}
           >
-            {writeAccess ? '✏️' : '🔒'}
+            {writeAccess ? '📝' : '🔒'}
           </button>
           <button
             className="btn-client-action btn-kick"
