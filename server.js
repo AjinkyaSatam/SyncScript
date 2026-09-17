@@ -23,6 +23,10 @@ const io = new Server(server, {
     origin: '*',
     methods: ['GET', 'POST'],
   },
+  pingInterval: 10000,    // Ping clients every 10s (detect dead connections faster)
+  pingTimeout: 5000,      // Wait 5s for pong before considering client dead
+  transports: ['polling', 'websocket'], // Allow both transports server-side
+  allowUpgrades: true,
 });
 
 app.use(cors());
@@ -603,6 +607,16 @@ app.post('/api/compile', async (req, res) => {
   });
 });
 
+// Health check / keep-alive endpoint (prevents Render cold starts)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: Date.now(),
+    connections: io.engine.clientsCount || 0,
+  });
+});
+
 // Serve static frontend assets in production
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -620,6 +634,22 @@ let currentPort = process.env.PORT || 5000;
 function startServer(port) {
   server.listen(port, () => {
     console.log(`⚡ SyncScript server running on http://localhost:${port}`);
+
+    // Self-ping to prevent Render free tier from sleeping (pings every 14 minutes)
+    // Render free tier sleeps after 15 mins of inactivity
+    const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
+    if (RENDER_URL) {
+      const KEEP_ALIVE_INTERVAL = 14 * 60 * 1000; // 14 minutes
+      setInterval(async () => {
+        try {
+          await axios.get(`${RENDER_URL}/api/health`);
+          console.log('[Keep-Alive] Self-ping successful');
+        } catch (err) {
+          console.warn('[Keep-Alive] Self-ping failed:', err.message);
+        }
+      }, KEEP_ALIVE_INTERVAL);
+      console.log('[Keep-Alive] Auto-ping enabled (every 14 min)');
+    }
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.warn(`[SyncScript Warning] Port ${port} is already in use. Trying port ${port + 1}...`);

@@ -7,7 +7,13 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 18.0.0
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: syncscript
+          property: host
       - key: JDOODLE_CLIENT_ID
         sync: false
       - key: JDOODLE_CLIENT_SECRET
         sync: false
+
